@@ -1,136 +1,111 @@
-# DOI Paper Scraper - Extract Academic Papers to Markdown
+# 📄 DOI Paper Scraper — Extract Academic Papers to Markdown 🚀
 
-**Automated research paper extraction tool for academics and developers.** Scrape academic papers from ACM Digital Library, IEEE Xplore, and other publishers using DOI. Convert papers to structured Markdown with full-text content, figures, tables, and institutional access support.
+**An automated research paper extraction tool designed for academics, researchers, and developers.** 
 
-### What is DOI Paper Scraper?
+Scrape academic papers from **ACM Digital Library**, **IEEE Xplore**, and other publishers using just a **DOI**. Convert complex academic layouts into structured, clean **Markdown** with full-text content, LaTeX equations, tables, and high-quality figures.
 
-A Python command-line tool that automates the extraction of academic research papers from digital libraries. Download papers by Digital Object Identifier (DOI), convert them to clean Markdown format, and extract figures with original placement preserved. Ideal for research automation, bibliography management, content analysis, and building research databases.
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Key Features
+---
 
-- **DOI Resolution**: accepts plain DOIs, `doi.org` URLs, `dx.doi.org` URLs, publisher direct links, or any string containing a Digital Object Identifier
-- **Cloudflare Bypass**: uses [pydoll](https://github.com/autoscrape-labs/pydoll) for intelligent browser automation to access protected content
-- **Academic Publisher Support**: built-in scrapers for ACM Digital Library, IEEE Xplore (easily extensible for Springer, Elsevier, etc.)
-- **Content Extraction**: preserves full paper structure including headings, paragraphs, lists, tables, and citations
-- **Figure & Image Extraction**: automatically downloads figures, diagrams, and images with original placement preserved in output
-- **Markdown Conversion**: converts academic papers to clean, readable Markdown format perfect for research tools, documentation, and archival
-- **Institutional Authentication**: supports proxy and institutional login via browser cookies for accessing paywalled academic journals
-- **Batch Processing Ready**: command-line interface designed for automation and integration into research workflows
+## 🌟 Key Features
 
-## Why Use DOI Paper Scraper?
+- **🎯 Intelligent DOI Resolution**: Accepts plain DOIs, `doi.org` URLs, publisher direct links, or any string containing a Digital Object Identifier.
+- **🛡️ Cloudflare & Anti-Bot Bypass**: Leverages [pydoll](https://github.com/autoscrape-labs/pydoll) for advanced browser automation to bypass WAFs and access protected content.
+- **📚 Multi-Publisher Support**: Built-in specialized scrapers for **ACM Digital Library** and **IEEE Xplore**. Easily extensible for Springer, Elsevier, Wiley, and more.
+- **📐 Rich Content Extraction**: 
+  - Preserves full paper hierarchy (Headings, Sub-headings).
+  - Automatically converts **MathJax/LaTeX** equations into Markdown `$math$` blocks.
+  - Extracts **Figures and Tables** with original captions and placement.
+- **🔗 Institutional Access Support**: Seamlessly navigate paywalls using **Institutional Proxy** redirection and **Browser Cookie** injection (supports GMU's EZProxy and others).
+- **📋 Structured Output**: Generates clean, text-searchable Markdown files—perfect for research archival, NLP analysis, and building personal knowledge bases.
 
-- **Research Automation**: Build automated pipelines for literature review and citation tracking
-- **Knowledge Base Building**: Extract papers into searchable Markdown databases
-- **Content Analysis**: Convert PDFs to machine-readable text for NLP and text analysis
-- **Offline Access**: Create persistent Markdown copies of academic papers for offline research
-- **Data Mining**: Programmatically extract research data from scholarly articles
-- **Academic Accessibility**: Easy access to papers through institutional login support
-- **Open Source**: Free and extensible tool for researchers and developers
+---
 
-## Installation & Setup
+## 🛠️ Installation
 
-Requires Python ≥ 3.10 and [uv](https://docs.astral.sh/uv/) package manager.
+This project uses the high-performance [uv](https://docs.astral.sh/uv/) package manager.
 
 ```bash
-# Clone the repository
+# 1. Clone the repository
 git clone https://github.com/ahnafnafee/doi-paper-scraper.git
 cd doi-paper-scraper
 
-# Install dependencies
+# 2. Install dependencies (creates a virtualenv automatically)
 uv sync
 ```
 
-## Quick Start - Usage Examples
+---
 
-Extract papers using Digital Object Identifiers (DOIs) in multiple formats:
+## 🚀 Quick Usage
+
+Extract any paper into Markdown with one command:
 
 ```bash
 # Extract by plain DOI
 uv run paper-scrape 10.1145/3746059.3747603
 
-# Extract from DOI.org URL
-uv run paper-scrape "https://doi.org/10.1145/3746059.3747603"
+# Extract by DOI URL
+uv run paper-scrape "https://doi.org/10.1109/CSCloud-EdgeCom58631.2023.00053"
 
-# Extract from ACM Digital Library direct link
-uv run paper-scrape "https://dl.acm.org/doi/10.1145/3746059.3747603"
-
-# Extract from IEEE Xplore direct link
-uv run paper-scrape "https://ieeexplore.ieee.org/document/1234567"
-
-# Save to custom directory with folder organization
-uv run paper-scrape 10.1145/3746059.3747603 --output-dir ./research_papers
-
-# Extract with institutional login (for paywalled access)
-uv run paper-scrape 10.1145/3746059.3747603 --cookies cookies.json
+# Save to a specific directory
+uv run paper-scrape [DOI] --output-dir ./my_research
 ```
 
-## Accessing Paywalled Papers - Institutional Login
+### 🏫 Accessing Paywalled Content (Institutional Login)
 
-Access restricted academic content from your institution (university, research center, corporate research lab):
+If you have access via a University library (e.g., George Mason University):
 
-1. Install a browser extension like [Cookie-Editor](https://cookie-editor.com/) or [EditThisCookie](https://www.editthiscookie.com/)
-2. Log in to the academic publisher (ACM, IEEE, etc.) through your institution's proxy/VPN
-3. Export cookies as JSON using the browser extension
-4. Save to a file (e.g., `cookies.json`)
-5. Use with DOI Paper Scraper: `uv run paper-scrape [DOI] --cookies cookies.json`
+1. Log in to the publisher (IEEE/ACM) through your university's proxy.
+2. Export your session cookies as a JSON file using a browser extension (like [Cookie-Editor](https://cookie-editor.com/)).
+3. Run the scraper with the cookies and proxy flag:
 
-**Example institutions**: George Mason University, MIT, Stanford, UC Berkeley, and any university with library proxy access.
-
-## Output Format
-
-DOI Paper Scraper creates organized output with extracted content:
-
+```bash
+uv run paper-scrape [DOI] --cookies ieee_cookies.json --proxy "https://mutex.gmu.edu/login?qurl=%u"
 ```
+
+---
+
+## 💻 CLI Reference
+
+| Option | Shorthand | Description | Default |
+| :--- | :--- | :--- | :--- |
+| `--output-dir` | `-o` | Directory where papers and images will be saved. | `output/` |
+| `--cookies` | `-c` | Path to a JSON cookie file for institutional authentication. | `None` |
+| `--proxy` | `-p` | Proxy URL template (use `%u` for target URL). | GMU EZProxy |
+| `--no-proxy` | | Disable the default proxy even if on a supported domain. | `False` |
+| `--verbose` | `-v` | Enable detailed logging for debugging. | `False` |
+
+---
+
+## 📂 Output Structure
+
+The tool organizes extracted data into a clean, portable structure:
+
+```text
 output/
-├── Paper_Title.md          # Full paper in Markdown format (text-searchable)
-└── images/                 # All figures, diagrams, and tables
-    ├── figure_1.jpg       # Figures numbered and labeled
-    ├── figure_2.png
-    └── table_data.jpg
+├── Quarks_A_Secure_Messaging_Network.md   # Paper text + Markdown formatting
+└── images/                                # Extracted figures, diagrams, and tables
+    ├── fig_a1b2.png
+    └── table_c3d4.gif
 ```
 
-**Benefits of Markdown output**:
+---
 
-- Text-searchable format (unlike PDFs)
-- Git-friendly for version control
-- Easy to integrate into documentation systems
-- Compatible with static site generators (Hugo, MkDocs, Jekyll)
-- Preserves structure and formatting for readability
+## 🧬 Why Choose DOI Paper Scraper?
 
-## Supported Academic Publishers & DOI Prefixes
+- **Research Portability**: Text-searchable Markdown is 100x easier to search and edit than static PDFs.
+- **Knowledge Graphs**: Perfect for importing papers into tools like **Obsidian**, **Logseq**, or **Notion**.
+- **NLP Research**: Clean text extraction without the "noise" of PDF parsing (extra line breaks, headers/footers).
+- **Automation**: Designed to be integrated into CI/CD pipelines or batch processing scripts.
 
-| Publisher           | DOI Prefix | Status         | Coverage                                 |
-| ------------------- | ---------- | -------------- | ---------------------------------------- |
-| ACM Digital Library | `10.1145`  | ✅ Implemented | Computing, algorithms, HCI               |
-| IEEE Xplore         | `10.1109`  | ✅ Implemented | Electrical engineering, computer science |
-| Springer            | `10.1007`  | 🔄 Planned     | Physics, mathematics, computer science   |
-| Elsevier            | `10.1016`  | 🔄 Planned     | All scientific disciplines               |
+---
 
-**Want to add more publishers?** The tool is designed as an extensible framework—contributions welcome!
+## 📜 License
 
-## Use Cases & Applications
+Distributed under the **MIT License**. Free for academic, personal, and commercial use. 🎓
 
-### Academic & Research
+---
 
-- Literature review automation
-- Citation network analysis
-- Systematic review data extraction
-- Research paper archival and backup
-
-### Development & Integration
-
-- Build research knowledge bases
-- Create searchable paper databases
-- Extract metadata for research tools
-- Integrate with academic project pipelines
-
-### Content & Data Processing
-
-- Convert papers to training data for ML models
-- Text analysis and NLP experiments
-- Content analysis and information extraction
-- Bibliography and reference management
-
-## License
-
-MIT License - Free for academic and commercial use
+**Developed with ❤️ by [Ahnaf Nafee](https://github.com/ahnafnafee)**
