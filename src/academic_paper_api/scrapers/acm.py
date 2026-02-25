@@ -41,10 +41,11 @@ class ACMScraper(BaseScraper):
         doi: str,
         output_dir: Path,
         cookies_file: str | None = None,
+        proxy_url: str | None = None,
     ) -> Paper:
         """Scrape an ACM paper — sync wrapper around the async implementation."""
         return asyncio.run(
-            self._scrape_async(url, doi, output_dir, cookies_file)
+            self._scrape_async(url, doi, output_dir, cookies_file, proxy_url)
         )
 
     async def _scrape_async(
@@ -53,6 +54,7 @@ class ACMScraper(BaseScraper):
         doi: str,
         output_dir: Path,
         cookies_file: str | None = None,
+        proxy_url: str | None = None,
     ) -> Paper:
         paper = Paper(doi=doi, publisher=self.publisher_name, url=url)
 
@@ -61,16 +63,51 @@ class ACMScraper(BaseScraper):
         # ----------------------------------------------------------
         async with self._browser_tab(cookies_file) as tab:
             landing_url = f"{self.BASE}/doi/{doi}"
-            print(f"  ▸ Fetching ACM page: {landing_url}")
-            await tab.go_to(landing_url)
+            nav_url = self._build_proxied_url(proxy_url, landing_url)
+            print(f"  ▸ Fetching ACM page: {nav_url}")
+            await tab.go_to(nav_url)
             
             # Wait for Cloudflare/Page load
             import asyncio
             await asyncio.sleep(5)
+            
+            # Check if we landed on a login page (proxy auth)
+            await self._wait_for_login(tab, cookies_file=cookies_file)
+            # Update nav_url to the final redirected URL so relative links resolve correctly
+            nav_url = await tab.current_url
+            
             try:
                 await tab.query('h1[property="name"]', timeout=15)
             except Exception:
                 pass  # Ignore timeout
+
+            # Scroll to bottom slowly to trigger all lazy-loaded sections and images
+            print("  ▸ Scrolling down to trigger lazy loading…")
+            scroll_script = """
+            async () => {
+                let totalHeight = 0;
+                let distance = 600;
+                let maxScrolls = 50; 
+                let scrollCount = 0;
+                while(scrollCount < maxScrolls) {
+                    window.scrollBy(0, distance);
+                    totalHeight += distance;
+                    scrollCount++;
+                    await new Promise(r => setTimeout(r, 150));
+                    // Check if we've reached the bottom
+                    if (totalHeight >= document.body.scrollHeight) {
+                        break;
+                    }
+                }
+            }
+            """
+            try:
+                wrapped = f"return ({scroll_script})();"
+                await asyncio.wait_for(tab.execute_script(wrapped, await_promise=True), timeout=15)
+            except Exception as exc:
+                print(f"  ⚠ Automatic scroll timed out, but proceeding: {exc}")
+            
+            await asyncio.sleep(2)
 
             html = await tab.page_source
             page = self._parse_html(html)
@@ -111,12 +148,13 @@ class ACMScraper(BaseScraper):
             # ── Full-text body ─────────────────────────────────────────
             body = self._first(page.css("section#bodymatter"))
             if body:
-                paper.sections = await self._extract_sections(body, output_dir, landing_url, tab)
+                paper.sections = await self._extract_sections(body, output_dir, nav_url, tab)
             else:
                 # Fallback: try fullHtml URL
                 print("  ▸ No bodymatter found on landing page, trying fullHtml endpoint…")
                 fulltext_url = f"{self.BASE}/doi/fullHtml/{doi}"
-                await tab.go_to(fulltext_url)
+                nav_ft_url = self._build_proxied_url(proxy_url, fulltext_url)
+                await tab.go_to(nav_ft_url)
                 await asyncio.sleep(5)
                 try:
                     await tab.query("h2", timeout=15)
@@ -130,7 +168,7 @@ class ACMScraper(BaseScraper):
                 ))
                 if ft_body:
                     paper.sections = await self._extract_sections(
-                        ft_body, output_dir, fulltext_url, tab
+                        ft_body, output_dir, nav_ft_url, tab
                     )
                 else:
                     print("  ⚠ Could not find extractable body content.")

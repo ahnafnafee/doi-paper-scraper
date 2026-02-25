@@ -33,10 +33,11 @@ class IEEEScraper(BaseScraper):
         doi: str,
         output_dir: Path,
         cookies_file: str | None = None,
+        proxy_url: str | None = None,
     ) -> Paper:
         """Scrape an IEEE paper — sync wrapper."""
         return asyncio.run(
-            self._scrape_async(url, doi, output_dir, cookies_file)
+            self._scrape_async(url, doi, output_dir, cookies_file, proxy_url)
         )
 
     async def _scrape_async(
@@ -45,6 +46,7 @@ class IEEEScraper(BaseScraper):
         doi: str,
         output_dir: Path,
         cookies_file: str | None = None,
+        proxy_url: str | None = None,
     ) -> Paper:
         paper = Paper(doi=doi, publisher=self.publisher_name, url=url)
 
@@ -52,24 +54,76 @@ class IEEEScraper(BaseScraper):
         # 1. Fetch the paper page
         # ----------------------------------------------------------
         async with self._browser_tab(cookies_file) as tab:
-            print(f"  ▸ Fetching IEEE page: {url}")
-            await tab.go_to(url)
+            nav_url = self._build_proxied_url(proxy_url, url)
+            print(f"  ▸ Fetching IEEE page: {nav_url}")
+            await tab.go_to(nav_url)
             
             import asyncio
             await asyncio.sleep(5)
+            
+            # Check if we landed on a login page (proxy auth)
+            await self._wait_for_login(tab, cookies_file=cookies_file)
+            # Update nav_url to the final redirected URL so relative links resolve correctly
+            nav_url = await tab.current_url
+            
             try:
                 await tab.query(".document-title, h1.document-title", timeout=15)
             except Exception:
                 pass
+                
+            # Scroll to bottom slowly to trigger all lazy-loaded sections and images
+            # IEEE lazy-loads heavily, so this is required to get the full text
+            print("  ▸ Scrolling down to trigger lazy loading…")
+            scroll_script = """
+            async () => {
+                let totalHeight = 0;
+                let distance = 600;
+                let maxScrolls = 50; 
+                let scrollCount = 0;
+                while(scrollCount < maxScrolls) {
+                    window.scrollBy(0, distance);
+                    totalHeight += distance;
+                    scrollCount++;
+                    await new Promise(r => setTimeout(r, 150));
+                    // Check if we've reached the bottom
+                    if (totalHeight >= document.body.scrollHeight) {
+                        break;
+                    }
+                }
+            }
+            """
+            try:
+                wrapped = f"return ({scroll_script})();"
+                await asyncio.wait_for(tab.execute_script(wrapped, await_promise=True), timeout=15)
+            except Exception as exc:
+                print(f"  ⚠ Automatic scroll timed out, but proceeding: {exc}")
+                
+            await asyncio.sleep(2)
 
             html = await tab.page_source
+            
+            with open("ieee_debug.html", "w", encoding="utf-8") as f:
+                f.write(html)
+                
             page = self._parse_html(html)
 
-            # Title
-            title_el = self._first(page.css(
-                "h1.document-title span, .document-title, .title-wrapper h1"
-            ))
-            paper.title = self._clean_text(title_el.text) if title_el else ""
+            # Title - be more aggressive, try all matches for each selector
+            title = ""
+            title_selectors = [
+                "h1.document-title span", 
+                "h1.document-title", 
+                ".document-title", 
+                ".title-wrapper h1"
+            ]
+            for selector in title_selectors:
+                for el in page.css(selector):
+                    text = self._clean_text(el.text)
+                    if text:
+                        title = text
+                        break
+                if title:
+                    break
+            paper.title = title
 
             # Authors
             author_els = page.css(
@@ -89,11 +143,24 @@ class IEEEScraper(BaseScraper):
                     unique_authors.append(a)
             paper.authors = unique_authors
 
-            # Abstract
-            abstract_el = self._first(page.css(
-                ".abstract-text div, .abstract-text, #abstractSection p"
-            ))
-            paper.abstract = self._clean_text(abstract_el.text) if abstract_el else ""
+            # Abstract - similar aggressive approach
+            abstract = ""
+            abstract_selectors = [
+                "div[xplmathjax]",
+                ".abstract-text div", 
+                ".abstract-text", 
+                "#abstractSection p"
+            ]
+            for selector in abstract_selectors:
+                for el in page.css(selector):
+                    # If it's a heading like "Abstract:", skip it
+                    text = self._clean_text(el.text)
+                    if text and len(text) > 20 and not text.lower().endswith("abstract:"):
+                        abstract = text
+                        break
+                if abstract:
+                    break
+            paper.abstract = abstract
 
             # Keywords
             keyword_els = page.css(
@@ -108,7 +175,7 @@ class IEEEScraper(BaseScraper):
             # ----------------------------------------------------------
             # 2. Try to get full-text HTML content
             # ----------------------------------------------------------
-            paper.sections = await self._extract_sections(page, output_dir, url, tab)
+            paper.sections = await self._extract_sections(page, output_dir, nav_url, tab)
 
             if not paper.sections and paper.abstract:
                 paper.sections = [
@@ -141,39 +208,44 @@ class IEEEScraper(BaseScraper):
                 return sections
             return []
 
+        # Use a more flexible approach to find content elements
+        content_els = body.css("h2, h3, h4, p, figure, div.section")
+        
         current_section: Section | None = None
-
-        for child in body.children:
-            tag = child.tag if hasattr(child, "tag") else ""
-
+        
+        for el in content_els:
+            tag = el.tag if hasattr(el, "tag") else ""
+            
             if tag in ("h2", "h3", "h4"):
                 level = int(tag[1])
-                heading = self._clean_text(child.text)
+                heading = self._clean_text(el.text)
                 if heading:
                     current_section = Section(
                         heading=heading, level=level, content=[]
                     )
                     sections.append(current_section)
-
+            
             elif tag == "p":
-                text = self._clean_text(child.text)
+                text = self._clean_text(el.text)
                 if text:
+                    # Avoid duplications if p is ancestor of other matched elements
+                    # (though selectolax .css() usually handles this okay)
                     if current_section:
                         current_section.content.append(text)
                     else:
                         current_section = Section(heading="", level=2, content=[text])
                         sections.append(current_section)
-
-            elif tag in ("figure", "div"):
-                fig = await self._extract_figure(child, output_dir, base_url, tab)
+            
+            elif tag == "figure":
+                fig = await self._extract_figure(el, output_dir, base_url, tab)
                 if fig:
                     if current_section:
                         current_section.content.append(fig)
                     elif sections:
                         sections[-1].content.append(fig)
-
-            elif tag == "section":
-                sub = await self._extract_from_section(child, output_dir, base_url, tab)
+            
+            elif tag == "div" and "section" in el.attrib.get("class", ""):
+                sub = await self._extract_from_section(el, output_dir, base_url, tab)
                 sections.extend(sub)
 
         return sections

@@ -25,11 +25,22 @@ console = Console()
 )
 @click.option(
     "--cookies",
-    default=None,
-    type=click.Path(exists=True),
-    help="Path to a JSON cookies file for authenticated access (e.g. institutional login).",
+    default="ieee_cookies.json",
+    type=click.Path(),
+    help="Path to a JSON cookies file (default: ieee_cookies.json).",
 )
-def main(doi_input: str, output_dir: str, cookies: str | None) -> None:
+@click.option(
+    "--proxy",
+    default="https://mutex.gmu.edu/login?qurl=%u",
+    help="Institutional proxy URL template (default: GMU mutex). Use %%u for full URL.",
+)
+@click.option(
+    "--no-proxy",
+    is_flag=True,
+    default=False,
+    help="Skip the institutional proxy and access the publisher directly.",
+)
+def main(doi_input: str, output_dir: str, cookies: str | None, proxy: str | None, no_proxy: bool) -> None:
     """Scrape an academic paper by DOI and reconstruct it as Markdown.
 
     DOI_INPUT can be any of:
@@ -41,6 +52,13 @@ def main(doi_input: str, output_dir: str, cookies: str | None) -> None:
       - Any URL or string containing a DOI
     """
     out = Path(output_dir)
+
+    # Resolve proxy setting
+    effective_proxy = None if no_proxy else proxy
+
+    # Validate cookies file — skip if it doesn't exist
+    if cookies and not Path(cookies).exists():
+        console.print(f"  [dim]Cookies file not found: {cookies} (will create it upon successful session)[/dim]")
 
     # ── Step 1: Extract & resolve DOI ──────────────────────────────
     with console.status("[bold cyan]Resolving DOI…"):
@@ -75,7 +93,9 @@ def main(doi_input: str, output_dir: str, cookies: str | None) -> None:
             doi=resolved.doi,
             output_dir=out,
             cookies_file=cookies,
+            proxy_url=effective_proxy,
         )
+
     except Exception as exc:
         import traceback
         traceback.print_exc()

@@ -35,3 +35,5 @@ test_output/
 
 # Cookies
 cookies.json
+ieee_cookies.json
+acm_cookies.json
