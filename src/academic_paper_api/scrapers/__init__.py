@@ -12,10 +12,18 @@ def get_scraper(publisher: str) -> BaseScraper:
     """Return the appropriate scraper for the given publisher name."""
     from .acm import ACMScraper
     from .ieee import IEEEScraper
+    from .springer import SpringerScraper
+    from .elsevier import ElsevierScraper
+    from .wiley import WileyScraper
+    from .arxiv import ArxivScraper
 
     scrapers: dict[str, type[BaseScraper]] = {
         "acm": ACMScraper,
         "ieee": IEEEScraper,
+        "springer": SpringerScraper,
+        "elsevier": ElsevierScraper,
+        "wiley": WileyScraper,
+        "arxiv": ArxivScraper,
     }
 
     key = publisher.lower()
