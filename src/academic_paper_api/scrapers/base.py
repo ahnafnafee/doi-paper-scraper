@@ -343,6 +343,17 @@ class BaseScraper(ABC):
         return re.sub(r"\s+", " ", str(text)).strip()
 
     @staticmethod
+    def _get_text(el) -> str:
+        """Get all text from an element, including children."""
+        if not el:
+            return ""
+        if hasattr(el, "get_all_text"):
+            return el.get_all_text()
+        if hasattr(el, "text"):
+            return str(el.text)
+        return ""
+
+    @staticmethod
     def _make_absolute_url(base: str, relative: str) -> str:
         """Convert a potentially relative URL to absolute."""
         if not relative:

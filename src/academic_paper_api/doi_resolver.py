@@ -20,14 +20,19 @@ import httpx
 # DOI format: 10.XXXX/... where XXXX is 4-5 digit registrant code
 DOI_PATTERN = re.compile(r"(10\.\d{4,9}/[^\s]+)")
 
+# arXiv ID pattern: e.g. 2104.08653 or arxiv:2104.08653v1
+ARXIV_PATTERN = re.compile(r"((?:arxiv:)?\d{4}\.\d{4,5}(?:v\d+)?)", re.IGNORECASE)
+
 # Known DOI prefixes → publisher names
 PREFIX_TO_PUBLISHER: dict[str, str] = {
     "10.1145": "acm",       # ACM
     "10.1109": "ieee",      # IEEE
     "10.1007": "springer",  # Springer
     "10.1016": "elsevier",  # Elsevier
+    "10.1002": "wiley",     # Wiley
     "10.1038": "nature",    # Nature
     "10.1126": "science",   # Science (AAAS)
+    "10.48550": "arxiv",    # arXiv
 }
 
 # Domain → publisher fallback mapping
@@ -36,6 +41,7 @@ DOMAIN_TO_PUBLISHER: dict[str, str] = {
     "ieeexplore.ieee.org": "ieee",
     "link.springer.com": "springer",
     "sciencedirect.com": "elsevier",
+    "onlinelibrary.wiley.com": "wiley",
     "nature.com": "nature",
     "science.org": "science",
     "arxiv.org": "arxiv",
@@ -58,7 +64,7 @@ def extract_doi(input_str: str) -> str:
         input_str: A DOI string, DOI URL, or publisher URL containing a DOI.
 
     Returns:
-        The extracted DOI (e.g. '10.1145/3746059.3747603').
+        The extracted DOI (e.g. '10.1145/3746059.3747603' or '10.48550/arXiv.2104.08653').
 
     Raises:
         ValueError: If no valid DOI is found in the input.
@@ -70,6 +76,13 @@ def extract_doi(input_str: str) -> str:
         # Clean trailing punctuation that might have been captured
         doi = match.group(1).rstrip(".,;:)")
         return doi
+
+    # Check for arxiv pattern
+    arxiv_match = ARXIV_PATTERN.search(input_str)
+    if arxiv_match:
+        # Standardize arxiv DOIs
+        arxiv_id = arxiv_match.group(1).lower().replace("arxiv:", "").rstrip(".,;:)")
+        return f"10.48550/arXiv.{arxiv_id}"
 
     raise ValueError(
         f"Could not extract a DOI from input: '{input_str}'. "
